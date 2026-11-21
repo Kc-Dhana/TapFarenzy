@@ -19,18 +19,29 @@ struct ContentView: View {
     @State private var timeRemaining = 10
     @State private var phase: GamePhase = .idle
 
-    // Challenge 1: Combo variables
+    // Combo variables
     @State private var multiplier = 1
     @State private var lastTap = Date.distantPast
 
-    // Challenge 4: Button shrinking
+    // Button shrinking
     @State private var buttonSize: CGFloat = 200
+
+    // MARK: - Animation Variables
+
+    @State private var buttonBounce = false
+    @State private var buttonGlow = false
+    @State private var comboPulse = false
+    @State private var scorePop = false
+
+    @State private var floatingScore = 0
+    @State private var showFloatingScore = false
+    @State private var scorePopupID = UUID()
 
     // Save high score permanently
     @AppStorage("highScore") private var highScore = 0
     @AppStorage("gamesPlayed") private var gamesPlayed = 0
 
-    // Timer runs every second
+    // Timer
     let timer = Timer.publish(
         every: 1,
         on: .main,
@@ -76,6 +87,12 @@ struct ContentView: View {
                         Text("\(score)")
                             .font(.system(size: 38, weight: .heavy))
                             .foregroundColor(.cyan)
+                            .contentTransition(.numericText())
+                            .scaleEffect(scorePop ? 1.2 : 1.0)
+                            .animation(
+                                .spring(response: 0.25, dampingFraction: 0.4),
+                                value: score
+                            )
                     }
                     .frame(maxWidth: .infinity)
                     .padding()
@@ -91,6 +108,7 @@ struct ContentView: View {
                         Text("\(highScore)")
                             .font(.system(size: 38, weight: .heavy))
                             .foregroundColor(.purple)
+                            .contentTransition(.numericText())
                     }
                     .frame(maxWidth: .infinity)
                     .padding()
@@ -109,7 +127,9 @@ struct ContentView: View {
 
                     Text("\(timeRemaining) SEC")
                         .font(.system(size: 32, weight: .bold))
-                        .foregroundColor(.cyan)
+                        .foregroundColor(timeRemaining <= 3 ? .red : .cyan)
+                        .contentTransition(.numericText())
+                        .scaleEffect(timeRemaining <= 3 ? 1.1 : 1.0)
                 }
 
                 // MARK: - Progress Bar
@@ -134,85 +154,195 @@ struct ContentView: View {
 
                 if phase != .over {
 
-                    Button {
+                    ZStack {
 
-                        // First tap starts the game
-                        if phase == .idle {
-                            phase = .playing
-                        }
+                        Button {
 
-                        // Challenge 1: Combo system
-                        let currentTime = Date()
+                            // First tap starts the game
+                            if phase == .idle {
+                                phase = .playing
+                            }
 
-                        if currentTime.timeIntervalSince(lastTap) <= 0.3 {
-                            multiplier = min(multiplier + 1, 3)
-                        } else {
-                            multiplier = 1
-                        }
+                            // Combo system
+                            let currentTime = Date()
 
-                        lastTap = currentTime
+                            if currentTime.timeIntervalSince(lastTap) <= 0.3 {
+                                multiplier = min(multiplier + 1, 3)
+                            } else {
+                                multiplier = 1
+                            }
 
-                        // Add score using combo multiplier
-                        score += multiplier
+                            lastTap = currentTime
 
-                        // Challenge 4: Shrink button after each tap
-                        buttonSize = max(120, buttonSize - 8)
+                            // Add score using combo multiplier
+                            score += multiplier
 
-                        // Vibration feedback
-                        UIImpactFeedbackGenerator(style: .light)
-                            .impactOccurred()
+                            // Challenge 4: Shrink button
+                            buttonSize = max(120, buttonSize - 8)
 
-                    } label: {
+                            // Floating score popup
+                            showScorePopup(multiplier)
 
-                        ZStack {
+                            // Button bounce
+                            withAnimation(
+                                .spring(response: 0.18, dampingFraction: 0.35)
+                            ) {
+                                buttonBounce = true
+                                buttonGlow = true
+                            }
 
-                            // Outer circle
-                            Circle()
-                                .stroke(
-                                    Color.cyan.opacity(0.3),
-                                    lineWidth: 12
-                                )
+                            // Score pulse
+                            withAnimation(.spring(response: 0.2, dampingFraction: 0.4)) {
+                                scorePop = true
+                            }
 
-                            // Main circle
-                            Circle()
-                                .stroke(Color.cyan, lineWidth: 4)
+                            // Combo animation
+                            withAnimation(.spring(response: 0.2, dampingFraction: 0.3)) {
+                                comboPulse = true
+                            }
 
-                            // Bike icon
-                            Image(systemName: "bicycle")
-                                .font(.system(size: buttonSize * 0.30))
-                                .foregroundColor(.cyan)
+                            // Vibration
+                            UIImpactFeedbackGenerator(style: .light)
+                                .impactOccurred()
 
-                            // Button text
-                            VStack(spacing: 5) {
+                            // Button release
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
 
-                                Text("TAP!")
-                                    .font(.system(
-                                        size: 28,
-                                        weight: .black
-                                    ))
-                                    .foregroundColor(.white)
-
-                                Text("TO RACE")
-                                    .font(.caption)
-                                    .tracking(2)
-                                    .foregroundColor(.cyan)
-
-                                // Show combo multiplier
-                                if multiplier > 1 {
-                                    Text("x\(multiplier) COMBO!")
-                                        .font(.headline)
-                                        .bold()
-                                        .foregroundColor(.yellow)
+                                withAnimation(
+                                    .spring(response: 0.35, dampingFraction: 0.45)
+                                ) {
+                                    buttonBounce = false
+                                    buttonGlow = false
+                                    scorePop = false
+                                    comboPulse = false
                                 }
                             }
+
+                        } label: {
+
+                            ZStack {
+
+                                // Outer glowing circle
+                                Circle()
+                                    .stroke(
+                                        Color.cyan.opacity(0.25),
+                                        lineWidth: 12
+                                    )
+                                    .shadow(
+                                        color: .cyan.opacity(buttonGlow ? 0.9 : 0.2),
+                                        radius: buttonGlow ? 30 : 10
+                                    )
+
+                                // Main circle
+                                Circle()
+                                    .stroke(
+                                        Color.cyan,
+                                        lineWidth: 4
+                                    )
+                                    .shadow(
+                                        color: .cyan.opacity(0.8),
+                                        radius: buttonGlow ? 20 : 5
+                                    )
+
+                                // Inner background
+                                Circle()
+                                    .fill(
+                                        RadialGradient(
+                                            colors: [
+                                                Color.cyan.opacity(0.2),
+                                                Color.blue.opacity(0.08),
+                                                Color.clear
+                                            ],
+                                            center: .center,
+                                            startRadius: 5,
+                                            endRadius: buttonSize / 2
+                                        )
+                                    )
+
+                                // Hand icon
+                                Image(systemName: "hand.tap.fill")
+                                    .font(
+                                        .system(size: buttonSize * 0.20)
+                                    )
+                                    .foregroundColor(.cyan)
+                                    .offset(y: -5)
+
+                                // Button text
+                                VStack(spacing: 0) {
+
+                                    Text("TAP")
+                                        .font(
+                                            .system(
+                                                size: 28,
+                                                weight: .black
+                                            )
+                                        )
+                                        .foregroundColor(.white)
+                                        .offset(y: -30)
+
+                                    Text("TAP!")
+                                        .font(.caption)
+                                        .tracking(2)
+                                        .foregroundColor(.cyan)
+                                        .offset(y: 20)
+
+                                    if multiplier > 1 {
+
+                                        Text("x\(multiplier) COMBO!")
+                                            .font(.headline)
+                                            .bold()
+                                            .foregroundColor(.yellow)
+                                            .scaleEffect(
+                                                comboPulse ? 1.35 : 1.0
+                                            )
+                                            .shadow(
+                                                color: .yellow.opacity(0.9),
+                                                radius: comboPulse ? 15 : 4
+                                            )
+                                    }
+                                }
+                            }
+                            .frame(
+                                width: buttonSize,
+                                height: buttonSize
+                            )
+                            .scaleEffect(buttonBounce ? 0.88 : 1.0)
                         }
-                        .frame(
-                            width: buttonSize,
-                            height: buttonSize
+                        .buttonStyle(.plain)
+                        .animation(
+                            .spring(response: 0.3, dampingFraction: 0.5),
+                            value: buttonSize
                         )
+
+                        // MARK: - Floating Score
+
+                        if showFloatingScore {
+
+                            Text("+\(floatingScore)")
+                                .font(
+                                    .system(size: 32, weight: .black)
+                                )
+                                .foregroundColor(.yellow)
+                                .shadow(
+                                    color: .orange.opacity(0.9),
+                                    radius: 12
+                                )
+                                .offset(
+                                    x: 105,
+                                    y: -105
+                                )
+                                .transition(
+                                    .asymmetric(
+                                        insertion: .move(edge: .top)
+                                            .combined(with: .opacity)
+                                            .combined(with: .scale(scale: 0.5)),
+                                        removal: .move(edge: .top)
+                                            .combined(with: .opacity)
+                                    )
+                                )
+                                .id(scorePopupID)
+                        }
                     }
-                    .buttonStyle(.plain)
-                    .animation(.spring(), value: buttonSize)
 
                 } else {
 
@@ -231,6 +361,7 @@ struct ContentView: View {
                         Text("\(score)")
                             .font(.system(size: 55, weight: .heavy))
                             .foregroundColor(.white)
+                            .contentTransition(.numericText())
 
                         Text("Best: \(highScore)")
                             .font(.headline)
@@ -245,6 +376,12 @@ struct ContentView: View {
                             lastTap = .distantPast
                             buttonSize = 200
 
+                            buttonBounce = false
+                            buttonGlow = false
+                            comboPulse = false
+                            scorePop = false
+                            showFloatingScore = false
+
                             phase = .idle
                         }
                         .font(.headline)
@@ -254,6 +391,7 @@ struct ContentView: View {
                         .background(Color.cyan)
                         .cornerRadius(25)
                     }
+                    .transition(.scale.combined(with: .opacity))
                 }
 
                 Spacer()
@@ -275,22 +413,41 @@ struct ContentView: View {
 
         .onReceive(timer) { _ in
 
-            // Countdown only while playing
             if phase == .playing && timeRemaining > 0 {
 
                 timeRemaining -= 1
 
-                // End game when timer reaches zero
                 if timeRemaining == 0 {
 
                     phase = .over
                     gamesPlayed += 1
 
-                    // Save new high score
+                    // Save high score
                     if score > highScore {
                         highScore = score
                     }
                 }
+            }
+        }
+    }
+
+    // MARK: - Floating Score Animation
+
+    private func showScorePopup(_ points: Int) {
+
+        floatingScore = points
+        scorePopupID = UUID()
+
+        withAnimation(
+            .spring(response: 0.35, dampingFraction: 0.55)
+        ) {
+            showFloatingScore = true
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
+
+            withAnimation(.easeOut(duration: 0.3)) {
+                showFloatingScore = false
             }
         }
     }
