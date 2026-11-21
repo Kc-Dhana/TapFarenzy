@@ -36,7 +36,9 @@ struct ContentView: View {
     @State private var floatingScore = 0
     @State private var showFloatingScore = false
     @State private var scorePopupID = UUID()
-
+    @State private var randomX: CGFloat = 0
+    @State private var randomY: CGFloat = 0
+    
     // Save high score permanently
     @AppStorage("highScore") private var highScore = 0
     @AppStorage("gamesPlayed") private var gamesPlayed = 0
@@ -307,6 +309,7 @@ struct ContentView: View {
                                 height: buttonSize
                             )
                             .scaleEffect(buttonBounce ? 0.88 : 1.0)
+                            .offset(x: randomX, y: randomY)
                         }
                         .buttonStyle(.plain)
                         .animation(
@@ -452,7 +455,16 @@ struct ContentView: View {
         }
     }
 }
+//movieg buttons
+private func moveButtonRandomly() {
 
+    withAnimation(
+        .spring(response: 0.4, dampingFraction: 0.6)
+    ) {
+        randomX = CGFloat.random(in: -80...80)
+        randomY = CGFloat.random(in: -100...100)
+    }
+}
 // MARK: - Preview
 
 #Preview {
